@@ -13,9 +13,6 @@ import org.slf4j.LoggerFactory;
 public class ProducerTester {
 
     static Logger logger = LoggerFactory.getLogger(ProducerTester.class);
-    //0表示默认;
-    static AtomicInteger state = new AtomicInteger(0);
-    static String errorMessage = "";
 
     static class ProducerTask extends Thread {
         String label = Thread.currentThread().getName();
@@ -23,6 +20,11 @@ public class ProducerTester {
         Producer producer = null;
         int sendNum = 0;
         Map<String, Integer> offsets = new HashMap<>();
+
+        public int getSendNum() {
+            return sendNum;
+        }
+
         public ProducerTask(String label) {
             this.label = label;
             init();
@@ -44,8 +46,10 @@ public class ProducerTester {
             }
             //init offsets
             for (int i = 0; i < 10; i++) {
-                offsets.put("TOPIC_" + i, 0);
                 offsets.put("QUEUE_" + i, 0);
+            }
+            for(int i=0;i<90;i++){
+                offsets.put("TOPIC_" + i, 0);
             }
 
         }
@@ -55,17 +59,30 @@ public class ProducerTester {
             while (true) {
                 try {
                     String queueOrTopic;
+                    Message message;
                     if (sendNum % 10 == 0) {
                         queueOrTopic = "QUEUE_" + random.nextInt(10);
+                        message = producer.createBytesMessageToQueue(queueOrTopic, (label + "_" + offsets.get(queueOrTopic)).getBytes());
+
                     } else {
-                        queueOrTopic = "TOPIC_" + random.nextInt(10);
+                        queueOrTopic = "TOPIC_" + random.nextInt(90);
+                        message = producer.createBytesMessageToTopic(queueOrTopic, (label + "_" + offsets.get(queueOrTopic)).getBytes());
                     }
-                    Message message = producer.createBytesMessageToQueue(queueOrTopic, (label + "_" + offsets.get(queueOrTopic)).getBytes());
                     logger.debug("queueOrTopic:{} offset:{}", queueOrTopic, label + "_" + offsets.get(queueOrTopic));
                     offsets.put(queueOrTopic, offsets.get(queueOrTopic) + 1);
+                    message.putHeaders("String", "s");
+                    message.putHeaders("1", 1);
+                    message.putHeaders("1.0", 1.0);
+                    message.putHeaders("1L", 1L);
+                    message.putProperties("Key", "value");
+                    message.putProperties("2", 2);
+                    message.putProperties("2.0", 2.0);
+                    message.putProperties("2L", 2L);
+                    message.putHeaders("fooooo", "barrrrr");
                     producer.send(message);
                     sendNum++;
                     if (sendNum >= Constants.PRO_MAX) {
+                        producer.flush();
                         break;
                     }
                 } catch (Exception e) {
@@ -78,7 +95,7 @@ public class ProducerTester {
     }
 
     public static void main(String[] args) throws Exception {
-        Thread[] ts = new Thread[Constants.PRO_NUM];
+        ProducerTask[] ts = new ProducerTask[Constants.PRO_NUM];
         for (int i = 0; i < ts.length; i++) {
             ts[i] = new ProducerTask(Constants.PRO_PRE + i);
         }
@@ -90,6 +107,10 @@ public class ProducerTester {
             ts[i].join();
         }
         long end = System.currentTimeMillis();
-        logger.info("Produce Finished, Cost {} ms", end - start);
+        int count = 0;
+        for(ProducerTask thread:ts){
+            count += thread.getSendNum();
+        }
+        logger.info("Produce Finished, Cost {} ms, produce count is {}", end - start, count);
     }
 }

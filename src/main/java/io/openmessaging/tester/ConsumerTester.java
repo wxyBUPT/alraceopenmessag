@@ -2,29 +2,19 @@ package io.openmessaging.tester;
 
 import io.openmessaging.BytesMessage;
 import io.openmessaging.KeyValue;
-import io.openmessaging.Message;
 import io.openmessaging.MessageHeader;
-import io.openmessaging.Producer;
 import io.openmessaging.PullConsumer;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.concurrent.Callable;
-import java.util.concurrent.Future;
-import java.util.concurrent.FutureTask;
-import java.util.concurrent.RunnableFuture;
+
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import org.junit.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class ConsumerTester {
 
     static Logger logger = LoggerFactory.getLogger(ConsumerTester.class);
-    //0表示默认;
-    static AtomicInteger state = new AtomicInteger(0);
-    static String errorMessage = "";
 
     static class ConsumerTask extends Thread {
         String queue;
@@ -82,13 +72,34 @@ public class ConsumerTester {
                     if (queueOrTopic == null || queueOrTopic.length() == 0) {
                         throw new Exception("Queue or Topic name is empty");
                     }
+                    KeyValue headers = message.headers();
+                    if(
+                            headers.getDouble("1.0")!=1.0 ||
+                                    headers.getLong("1L") != 1L||
+                                    !headers.getString("String").equals("s")||
+                                    headers.getInt("1") != 1
+
+                            ){
+                        System.out.println("Worne");
+                    }
+                    KeyValue prop = message.properties();
+                    assert prop.containsKey("Key");
+                    if(
+                            prop.getDouble("2.0")!=2.0||
+                                    !prop.getString("Key").equals("value")||
+                                    prop.getLong("2L")!=2L||
+                                    prop.getInt("2")!=2
+                            ){
+                        System.out.println("Worne");
+                    }else {
+                    }
                     String body = new String(message.getBody());
                     int index = body.lastIndexOf("_");
                     String producer = body.substring(0, index);
                     int offset = Integer.parseInt(body.substring(index + 1));
                     if (offset != offsets.get(queueOrTopic).get(producer)) {
                         logger.error("Offset not equal expected:{} actual:{} producer:{} queueOrTopic:{}",
-                            offsets.get(producer), offset, producer, queueOrTopic);
+                                offsets.get(queueOrTopic).get(producer), offset, producer, queueOrTopic);
                         break;
                     } else {
                         offsets.get(queueOrTopic).put(producer, offset + 1);
@@ -110,15 +121,38 @@ public class ConsumerTester {
     public static void main(String[] args) throws Exception {
         Thread[] ts = new Thread[Constants.CON_NUM];
         for (int i = 0; i < ts.length; i++) {
-            ts[i] = new ConsumerTask(Constants.QUEUE_PRE + i,
-                Collections.singletonList(Constants.TOPIC_PRE + i));
+            List<String> topics = new ArrayList<>(2);
+            for(int j=0; j<9 ; j++){
+                String name = Constants.TOPIC_PRE + (i*9 + j);
+                topics.add(name);
+            }
+            ts[i] = new ConsumerTask(Constants.QUEUE_PRE + i,topics);
         }
         long start = System.currentTimeMillis();
         for (int i = 0; i < ts.length; i++) {
             ts[i].start();
         }
+        AtomicInteger nRunning = new AtomicInteger(ts.length);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (nRunning.get()!=0) {
+                    for (int i = 0; i < ts.length; i++) {
+                        logger.info("Thread {}: pullNum is : {}", i, ((ConsumerTask) ts[i]).getPullNum());
+                    }
+                    logger.info("");
+                    try {
+                        Thread.sleep(5000);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+                logger.info("pullNumberReportThread stop!");
+            }
+        }, "pullNumberReportThread").start();
         for (int i = 0; i < ts.length; i++) {
             ts[i].join();
+            nRunning.decrementAndGet();
         }
         int pullNum = 0;
         for (int i = 0; i < ts.length; i++) {
