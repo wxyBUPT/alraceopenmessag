@@ -43,7 +43,7 @@ public class DefaultProducer implements Producer{
 
     @Override
     public void send(Message message) {
-        if (message == null) throw new ClientOMSException("Message should not be null");
+        if (message == null) return;
         DefaultBytesMessage bytesMessage = (DefaultBytesMessage)message;
         String name = bytesMessage.getName();
         producerCache.putMessage(NameUtil.getCode(name), bytesMessage);

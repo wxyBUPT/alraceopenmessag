@@ -24,13 +24,28 @@ public class NameUtil {
     static int topicCount = Conf.TOPIC_COUNT;
     public static int getCode(String name){
         int i = name.indexOf("_");
-        int num = Integer.parseInt(name.substring(i+1));
+        // 如果两个数字位
+        int num = 0;
+        if(i+3==name.length()){
+            num += 10 * (name.charAt(i+1) - '0');
+            num += (name.charAt(i+2) - '0');
+        }else {
+            num += (name.charAt(i+1) - '0');
+        }
         char c = name.charAt(0);
         if(c == 'T'){
             return num;
         }
         else {
             return topicCount + num;
+        }
+    }
+
+    public static void main(String[] args){
+        for(String s:names){
+            System.out.println(s);
+            System.out.println(getName(getCode(s)));
+            System.out.println();
         }
     }
 }

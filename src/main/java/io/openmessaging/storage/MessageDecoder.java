@@ -131,32 +131,4 @@ public class MessageDecoder {
         }
         return off;
     }
-
-    // 测试是否可以顺利编码解码
-    public static void main(String[] args){
-        ProducerPage page = new ProducerPage();
-        DefaultBytesMessage message = new DefaultBytesMessage("fooooooooo".getBytes());
-        message.putHeaders("foo", "bar");
-        message.putHeaders("1.0", 1.0);
-        message.putHeaders("1L", 1L);
-        message.putHeaders("1", 1);
-        message.putProperties("bar", "foo");
-        message.putProperties("2.0", 2.0);
-        message.putProperties("2L", 2L);
-        message.putProperties("2", 2);
-        int i = 0;
-        while (MessageEncoder.encodeMessageToPage(page, message)){
-            i ++;
-        }
-        System.out.println("crate:" + i);
-        System.out.println();
-
-        List<DefaultBytesMessage> messages = MessageDecoder.decodePage2Messages(page.bytes, "foo", "bar");
-        System.out.println(messages.size());
-        for(DefaultBytesMessage message1:messages){
-            if(!message.equals(message1)){
-                System.out.println("Wrone !");
-            }
-        }
-    }
 }
