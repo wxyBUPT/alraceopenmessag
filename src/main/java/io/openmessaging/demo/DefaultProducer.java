@@ -1,26 +1,40 @@
 package io.openmessaging.demo;
 
 import io.openmessaging.*;
+import io.openmessaging.storage.ProducerPage;
+import io.openmessaging.storage.ProducerStorage;
 import io.openmessaging.util.NameUtil;
 import io.openmessaging.util.StatusUtil;
 
 import java.io.IOException;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class DefaultProducer implements Producer{
-    static AtomicInteger threadCounter = new AtomicInteger(Conf.PRODUCER_COUNT);
-
-    ProducerCache producerCache;
+    public static AtomicInteger threadCounter = new AtomicInteger(0);
+    public static CountDownLatch ioFinish = new CountDownLatch(1);
 
     public DefaultProducer(KeyValue properties){
+        threadCounter.incrementAndGet();
         try {
             StatusUtil.init(properties.getString("STORE_PATH"), true);
         }catch (IOException e){
             e.printStackTrace();
             System.exit(-1);
         }
-        producerCache = ProducerCache.getInstance();
+        storage = ProducerStorage.getInstance();
     }
+
+    private final int total_num = Conf.TOTAL_COUNT;
+
+    private ProducerPage[] caches = new ProducerPage[total_num];
+    {
+        for(int i = 0; i<total_num; i++){
+            caches[i] = new ProducerPage(i);
+        }
+    }
+
+    private final ProducerStorage storage;
 
     @Override
     public BytesMessage createBytesMessageToTopic(String topic, byte[] body) {
@@ -46,14 +60,29 @@ public class DefaultProducer implements Producer{
         if (message == null) return;
         DefaultBytesMessage bytesMessage = (DefaultBytesMessage)message;
         String name = bytesMessage.getName();
-        producerCache.putMessage(NameUtil.getCode(name), bytesMessage);
+        int code = NameUtil.getCode(name);
+        ProducerPage page = caches[code];
+        boolean saved = page.storMessage(bytesMessage);
+        if(saved)return;
+
+        // 如果放不下当前消息, 如果缓存队列满了, 则会一直阻塞
+        storage.putPage(page);
+
+        caches[code] = new ProducerPage(code);
+        caches[code].storMessage(bytesMessage);
     }
 
     @Override
     public void flush() {
-        if(threadCounter.decrementAndGet()==0){
-            System.out.println("storealll !");
-            producerCache.storeAll();
+        //TODO 保存所有的消息
+        for(ProducerPage page:caches){
+            storage.putPage(page);
+        }
+        threadCounter.decrementAndGet();
+        try {
+            ioFinish.await();
+        }catch (InterruptedException e){
+            e.printStackTrace();
         }
     }
 

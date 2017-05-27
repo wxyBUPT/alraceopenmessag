@@ -5,7 +5,6 @@ import io.openmessaging.util.StatusUtil;
 
 import java.io.*;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -31,33 +30,11 @@ public class Storage {
         }
     }
 
-    // 只有producer阶段使用
-    int curr_file_num = -1;
-    RandomAccessFile currFile;
-    int curr_block = -1;
-
     private Storage(){
 
     }
 
     static Storage INSTANCE = null;
-    public static synchronized Storage getProducerStorage(){
-        if(INSTANCE == null){
-            INSTANCE = new Storage();
-            INSTANCE.initProducer();
-        }
-        return INSTANCE;
-    }
-
-    private void initProducer(){
-        try {
-            currFile = new RandomAccessFile(file_prefix + ++curr_file_num, "rw");
-            currFile.setLength((long) file_size);
-            files.add(currFile);
-        }catch (IOException e){
-            e.printStackTrace();
-        }
-    }
 
     public static synchronized Storage getConsumerStorage() {
         // TODO 从存储中读出打开文件的标号, 并打开所有所有的文件
@@ -81,27 +58,6 @@ public class Storage {
         }
     }
 
-    public synchronized int storePageBytes(byte[] bytes){
-        if(bytes.length != page_size){
-            throw new RuntimeException("Only support " + page_size + "byte block");
-        }
-        try {
-            // 文件已经满了
-            curr_block++;
-            if (curr_block == n_block_per_file) {
-                currFile.close();
-                currFile = new RandomAccessFile(file_prefix + ++curr_file_num, "rw");
-                currFile.setLength((long) file_size);
-                curr_block = 0;
-            }
-
-            currFile.write(bytes);
-            currFile.getFD().sync();
-        }catch (IOException e){
-            e.printStackTrace();
-        }
-        return curr_file_num * n_block_per_file + curr_block;
-    }
 
     public byte[] getPageBytes(int num) {
         byte[] bytes = new byte[page_size];
@@ -119,17 +75,6 @@ public class Storage {
         return bytes;
     }
 
-    public void storeIndex(List<Integer>[] index){
-        try {
-            FileOutputStream out = new FileOutputStream(file_prefix + "index");
-            ObjectOutputStream o = new ObjectOutputStream(out);
-            o.writeObject(index);
-            o.close();
-            out.close();
-        }catch (Exception e){
-            e.printStackTrace();
-        }
-    }
 
     public List<Integer>[] getIndex(){
         List<Integer>[] res = null;

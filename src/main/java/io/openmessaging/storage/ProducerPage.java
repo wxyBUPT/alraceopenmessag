@@ -15,6 +15,19 @@ public class ProducerPage {
     // 第一个没有被用到的消息位
     int pos = 0;
 
+    // 必须使用code初始化
+    private ProducerPage(){}
+
+    public int getCode() {
+        return code;
+    }
+
+    public ProducerPage(int code) {
+        this.code = code;
+    }
+
+    int code;
+
     public void clear(){
         pos = 0;
     }

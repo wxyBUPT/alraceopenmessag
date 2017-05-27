@@ -9,7 +9,6 @@ import io.openmessaging.MessageHeader;
 import io.openmessaging.PullConsumer;
 import io.openmessaging.storage.MessageDecoder;
 import io.openmessaging.util.NameUtil;
-import io.openmessaging.util.SleepUtils;
 import io.openmessaging.util.StatusUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -88,14 +87,6 @@ public class DefaultPullConsumer implements PullConsumer{
         }
         return true;
     }
-
-    transient boolean finish = false;
-
-    protected void infoFinish(){
-        finish = true;
-    }
-
-
 
     @Override
     public Message poll(KeyValue properties) {
