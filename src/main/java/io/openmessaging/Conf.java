@@ -25,7 +25,7 @@ public class Conf {
     // 每个pull consumer cache 消息的block块数
     public final static int CONSUMER_CACHE_BLOCK_SIZE = 100;
     // Consumer 解码线程的个数
-    public final static int CONSUMER_DECODE_THREAD_COUNT = 4;
+    public final static int CONSUMER_DECODE_THREAD_COUNT = 8;
     // 每个解码线程缓存page数目
-    public final static int CONSUMER_DECODE_CACHE_BLOCK_COUNT = 100;
+    public final static int CONSUMER_DECODE_CACHE_BLOCK_COUNT = 80;
 }
