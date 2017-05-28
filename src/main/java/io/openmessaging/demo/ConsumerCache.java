@@ -3,7 +3,7 @@ package io.openmessaging.demo;
 import io.openmessaging.Conf;
 import io.openmessaging.MessageHeader;
 import io.openmessaging.storage.MessageDecoder;
-import io.openmessaging.storage.Storage;
+import io.openmessaging.storage.ConsumerStorage;
 import io.openmessaging.util.NameUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,19 +11,21 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
  * Created by xiyuanbupt on 5/27/17.
+ * 处理IO顺序, 处理解码
  */
 public class ConsumerCache {
 
     static transient int registeredCount = 0;
     Logger logger = LoggerFactory.getLogger(ConsumerCache.class);
 
-    private final Storage storage = Storage.getConsumerStorage();
+    private final ConsumerStorage consumerStorage = ConsumerStorage.getConsumerStorage();
 
-    final List<Integer>[] index = storage.getIndex();
+    final List<Integer>[] index = consumerStorage.getIndex();
 
     final boolean[] registerd = new boolean[Conf.TOTAL_COUNT];
 
@@ -65,6 +67,10 @@ public class ConsumerCache {
         }
     }
 
+    // 不想给gc造成太大压力, 复用bytes对象
+    Queue<byte[]> bytesPool = new LinkedBlockingQueue<byte[]>(Conf.CONSUMER_DECODE_THREAD_COUNT * Conf.CONSUMER_DECODE_CACHE_BLOCK_COUNT);
+    int page_size = Conf.PAGE_SIZE;
+
     BlockingQueue<MessageBlock>[] shardedBlock = new BlockingQueue[Conf.CONSUMER_DECODE_THREAD_COUNT];
 
     class IOThread implements Runnable{
@@ -76,7 +82,11 @@ public class ConsumerCache {
                 while (!ioOrder.isEmpty()) {
                     // 首先读出
                     MessageBlock block = ioOrder.poll();
-                    byte[] bytes = storage.getPageBytes(block.block_num);
+                    byte[] bytes = bytesPool.poll();
+                    if(bytes == null){
+                        bytes = new byte[page_size];
+                    }
+                    consumerStorage.getPageBytes(block.block_num, bytes);
                     block.setBytes(bytes);
 
                     int shard = block.code & hashbits;
@@ -116,6 +126,11 @@ public class ConsumerCache {
                         }
                         // TODO 将消息route到订阅的消费者
                         List<DefaultBytesMessage> messages = MessageDecoder.decodePage2Messages(block.getBytes(), key, block.name);
+                        // TODO 将block的数据还回对象池
+                        if(!bytesPool.offer(block.bytes)){
+                            logger.info("May have wrone , can't put bytes to bytes pool , pool size is {}, if this log show, decoder may slower than IO", bytesPool.size());
+                        }
+
                         for (DefaultPullConsumer consumer : router[block.code]) {
                             consumer.messageBlocks.put(messages);
                         }
@@ -161,11 +176,6 @@ public class ConsumerCache {
         }
     }
 
-
-    byte[] getBlockFromDisk(int blocknum){
-        return storage.getPageBytes(blocknum);
-    }
-
     static class MessageBlock implements Comparable<MessageBlock>{
         String name;
         int code;
@@ -204,11 +214,6 @@ public class ConsumerCache {
 
         boolean isTopic(){
             return messageType == MessageType.TOPIC;
-        }
-
-        @Override
-        public String toString() {
-            return "block_num: " + block_num;
         }
 
         @Override

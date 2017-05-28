@@ -3,6 +3,8 @@ package io.openmessaging.learn;
 import io.openmessaging.Conf;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.Queue;
 
 
@@ -20,5 +22,7 @@ public class Test {
         for(int i = 0; i<9; i++){
             System.out.println(queue.poll());
         }
+        LinkedList<Integer> list = new LinkedList<>();
+        list.clear();
     }
 }

@@ -31,17 +31,6 @@ public final class DefaultKeyValue implements KeyValue {
         string_values = null;
     }
 
-    public Map<String,Integer> getIntMap(){
-        return int_values;
-    }
-
-    public Map<String, Long> getLongMap(){
-        return long_values;
-    }
-
-    public Map<String, String>  getStringMap(){
-        return string_values;
-    }
     public void setInt_values(Map<String, Integer> int_values) {
         this.int_values = int_values;
     }

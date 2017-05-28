@@ -13,7 +13,7 @@ import java.util.List;
  * 1. 需要与上层应用协商好pagesize
  * 2. 只负责高效的存储 byte[] 形式的page, 并返回page标号, 以及通过标号取出byte[] 形式的page
  */
-public class Storage {
+public class ConsumerStorage {
 
     static final int page_size = Conf.PAGE_SIZE;
     static final int file_size = Conf.FILE_SIZE;
@@ -30,16 +30,16 @@ public class Storage {
         }
     }
 
-    private Storage(){
+    private ConsumerStorage(){
 
     }
 
-    static Storage INSTANCE = null;
+    static ConsumerStorage INSTANCE = null;
 
-    public static synchronized Storage getConsumerStorage() {
+    public static synchronized ConsumerStorage getConsumerStorage() {
         // TODO 从存储中读出打开文件的标号, 并打开所有所有的文件
         if(INSTANCE == null){
-            INSTANCE = new Storage();
+            INSTANCE = new ConsumerStorage();
             INSTANCE.initConsumer();
         }
         return INSTANCE;
@@ -59,8 +59,8 @@ public class Storage {
     }
 
 
-    public byte[] getPageBytes(int num) {
-        byte[] bytes = new byte[page_size];
+    public void getPageBytes(int num, byte[] bytes) {
+        assert bytes.length == page_size;
         int file_num = num / n_block_per_file;
         int n_block = num % n_block_per_file;
         RandomAccessFile raf = files.get(file_num);
@@ -72,7 +72,6 @@ public class Storage {
         }catch (Exception e){
             e.printStackTrace();
         }
-        return bytes;
     }
 
 
