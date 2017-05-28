@@ -5,12 +5,19 @@ import io.openmessaging.storage.ProducerPage;
 import io.openmessaging.storage.ProducerStorage;
 import io.openmessaging.util.NameUtil;
 import io.openmessaging.util.StatusUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.ArrayDeque;
+import java.util.Queue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class DefaultProducer implements Producer{
+
+    Logger logger = LoggerFactory.getLogger(DefaultProducer.class);
+
     public static AtomicInteger threadCounter = new AtomicInteger(0);
     public static CountDownLatch ioFinish = new CountDownLatch(1);
     static transient int id = -1;
@@ -40,18 +47,39 @@ public class DefaultProducer implements Producer{
 
     private final ProducerStorage storage;
 
+    private Queue<ProducerBytesMessage> bytesMessagesPool ;
+    {
+        // 创建一定数量的对向
+        bytesMessagesPool = new ArrayDeque<>(16);
+        for(int i=0; i<8; i++){
+            bytesMessagesPool.add(new ProducerBytesMessage());
+        }
+    }
+
     @Override
     public BytesMessage createBytesMessageToTopic(String topic, byte[] body) {
-        DefaultBytesMessage defaultBytesMessage = new DefaultBytesMessage(body);
-        defaultBytesMessage.setName(topic);
-        return defaultBytesMessage;
+        ProducerBytesMessage producerBytesMessage = bytesMessagesPool.poll();
+        if(producerBytesMessage==null){
+            producerBytesMessage = new ProducerBytesMessage();
+        }else {
+            producerBytesMessage.clear();
+        }
+        producerBytesMessage.setBody(body);
+        producerBytesMessage.setName(topic);
+        return producerBytesMessage;
     }
 
     @Override
     public BytesMessage createBytesMessageToQueue(String queue, byte[] body) {
-        DefaultBytesMessage defaultBytesMessage = new DefaultBytesMessage(body);
-        defaultBytesMessage.setName(queue);
-        return defaultBytesMessage;
+        ProducerBytesMessage producerBytesMessage = bytesMessagesPool.poll();
+        if(producerBytesMessage==null){
+            producerBytesMessage = new ProducerBytesMessage();
+        }else {
+            producerBytesMessage.clear();
+        }
+        producerBytesMessage.setBody(body);
+        producerBytesMessage.setName(queue);
+        return producerBytesMessage;
     }
 
     @Override
@@ -61,13 +89,19 @@ public class DefaultProducer implements Producer{
 
     @Override
     public void send(Message message) {
+        // TODO 需要改为producerbytesmessage
         if (message == null) return;
-        DefaultBytesMessage bytesMessage = (DefaultBytesMessage)message;
+        ProducerBytesMessage bytesMessage = (ProducerBytesMessage) message;
         String name = bytesMessage.getName();
         int code = NameUtil.getCode(name);
         ProducerPage page = caches[code];
         boolean saved = page.storMessage(bytesMessage);
-        if(saved)return;
+        if(saved){
+            //TODO 归还 bytesmessage
+            bytesMessagesPool.add(bytesMessage);
+            return;
+        }
+
 
         // 如果放不下当前消息, 如果缓存队列满了, 则会一直阻塞
         storage.putPage(m_id, page);
@@ -81,15 +115,17 @@ public class DefaultProducer implements Producer{
             caches[code] = pooledPage;
         }
         caches[code].storMessage(bytesMessage);
+        //TODO 归还消息, 不要给GC太大压力
+        bytesMessagesPool.add(bytesMessage);
     }
 
     @Override
     public void flush() {
-        //TODO 保存所有的消息
         for(ProducerPage page:caches){
             storage.putPage(m_id, page);
         }
         threadCounter.decrementAndGet();
+        logger.info("Thread {} , BytesMessagePool size is {}", m_id, bytesMessagesPool.size());
         try {
             ioFinish.await();
         }catch (InterruptedException e){

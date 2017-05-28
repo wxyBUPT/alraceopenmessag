@@ -14,6 +14,8 @@ import java.util.Set;
 /**
  * Created by xiyuanbupt on 4/11/17.
  * KeyValue 的默认实现, 对于每一类默认使用对应的字典
+ * 约定:
+ * 1. 只有在Consumer阶段可以使用
  */
 public final class DefaultKeyValue implements KeyValue {
 

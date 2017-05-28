@@ -16,7 +16,6 @@ public class DefaultPullConsumer implements PullConsumer{
 
     ConsumerCache consumerCache;
 
-
     public DefaultPullConsumer(KeyValue properties){
         try{
             StatusUtil.init(properties.getString("STORE_PATH"), false);

@@ -1,7 +1,7 @@
 package io.openmessaging.storage;
 
 import io.openmessaging.Conf;
-import io.openmessaging.demo.DefaultBytesMessage;
+import io.openmessaging.demo.ProducerBytesMessage;
 
 /**
  * Created by xiyuanbupt on 5/26/17.
@@ -43,7 +43,7 @@ public class ProducerPage {
         return bytes;
     }
 
-    public boolean storMessage(DefaultBytesMessage message){
+    public boolean storMessage(ProducerBytesMessage message){
         // TODO 将消息保存到page中, 如果保存不下, 返回false
         return MessageEncoder.encodeMessageToPage(this, message);
     }

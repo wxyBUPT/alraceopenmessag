@@ -3,6 +3,8 @@ package io.openmessaging.storage;
 import io.openmessaging.Conf;
 import io.openmessaging.demo.DefaultBytesMessage;
 import io.openmessaging.demo.DefaultKeyValue;
+import io.openmessaging.demo.ProducerBytesMessage;
+import io.openmessaging.demo.ProducerKeyValue;
 import io.openmessaging.util.TypeUtil;
 import org.junit.Assert;
 
@@ -28,15 +30,15 @@ public class MessageEncoder {
      * 2 byte key 长度 | key的byte值 | 8byte long值 |
      * 对于double和int道理是一样的
      */
-    public static boolean encodeMessageToPage(ProducerPage producerPage, DefaultBytesMessage message){
+    public static boolean encodeMessageToPage(ProducerPage producerPage, ProducerBytesMessage message){
         int start = producerPage.pos;
         byte[] bytes = producerPage.bytes;
 
         // 如果有保存不下的风险
         if((start + page_safe_edage) > bytes.length)return false;
 
-        DefaultKeyValue headers = (DefaultKeyValue)message.headers();
-        DefaultKeyValue properties = (DefaultKeyValue)message.properties();
+        ProducerKeyValue headers = (ProducerKeyValue) message.headers();
+        ProducerKeyValue properties = (ProducerKeyValue) message.properties();
         // 保留4byte的长度
         int off = 4;
         int h_off = writeDefaultKeyValue(bytes, start + off, headers);
@@ -59,7 +61,7 @@ public class MessageEncoder {
         return true;
     }
 
-    private static int writeDefaultKeyValue(byte[] bytes, int start, DefaultKeyValue keyValue){
+    private static int writeDefaultKeyValue(byte[] bytes, int start, ProducerKeyValue keyValue){
         Map<String, String> strMap = keyValue.getStringMap();
         Map<String, Long> lonMap = keyValue.getLongMap();
         Map<String, Integer> intMap = keyValue.getIntMap();
@@ -79,10 +81,12 @@ public class MessageEncoder {
     private static int writeStringMap(byte[] bytes, int start, Map<String, String> map){
         int len = bytes.length;
         if(start + 2 > len)return -1;
+        /**
         if(map == null){
             TypeUtil.write2byteInt(bytes, 0, start);
             return 2;
         }
+         **/
         int off = 0;
         int size = map.size();
         TypeUtil.write2byteInt(bytes, size, start);
@@ -110,10 +114,12 @@ public class MessageEncoder {
     private static int writeLongMap(byte[] bytes, int start, Map<String, Long> map){
         int len = bytes.length;
         if(start + 2 > len)return -1;
+        /**
         if(map == null){
             TypeUtil.write2byteInt(bytes, 0, start);
             return 2;
         }
+         **/
         int off = 0;
         int size = map.size();
         TypeUtil.write2byteInt(bytes, size, start);
@@ -138,10 +144,12 @@ public class MessageEncoder {
     private static int writeIntMap(byte[] bytes, int start, Map<String, Integer> map){
         int len = bytes.length;
         if(start + 2 > len)return -1;
+        /**
         if(map == null){
             TypeUtil.write2byteInt(bytes, 0, start);
             return 2;
         }
+         **/
         int off = 0;
         int size = map.size();
         TypeUtil.write2byteInt(bytes, size, start);

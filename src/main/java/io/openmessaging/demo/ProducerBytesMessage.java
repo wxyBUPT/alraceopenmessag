@@ -4,16 +4,16 @@ import io.openmessaging.BytesMessage;
 import io.openmessaging.KeyValue;
 import io.openmessaging.Message;
 
-import java.util.Arrays;
-
 /**
- * Created by xiyuanbupt on 5/26/17.
+ * Created by xiyuanbupt on 5/28/17.
+ * producer 阶段的byte message
+ * 1. 因为在producer阶段生命周期较短, 所以应该为对象复用考虑
  */
-public class DefaultBytesMessage implements BytesMessage{
+public class ProducerBytesMessage implements BytesMessage{
 
-    private DefaultKeyValue headers;
-    private DefaultKeyValue properties;
-    private byte[] body;
+    private ProducerKeyValue headers = new ProducerKeyValue();
+    private ProducerKeyValue properties = new ProducerKeyValue();
+    private byte[] body = null;
     String name = null;
 
     public String getName() {
@@ -24,19 +24,11 @@ public class DefaultBytesMessage implements BytesMessage{
         this.name = name;
     }
 
-    private DefaultBytesMessage(){}
+    public ProducerBytesMessage(){}
 
-    public DefaultBytesMessage(byte[] body){
-        this.body = body;
-        headers = new DefaultKeyValue();
-        properties = new DefaultKeyValue();
-    }
-
-
-    public DefaultBytesMessage(DefaultKeyValue headers, DefaultKeyValue properties, byte[] body) {
-        this.headers = headers;
-        this.properties = properties;
-        this.body = body;
+    public void clear(){
+        headers.clear();
+        properties.clear();
     }
 
     @Override
