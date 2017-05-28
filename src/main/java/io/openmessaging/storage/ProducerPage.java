@@ -22,6 +22,10 @@ public class ProducerPage {
         return code;
     }
 
+    public void setCode(int code) {
+        this.code = code;
+    }
+
     public ProducerPage(int code) {
         this.code = code;
     }

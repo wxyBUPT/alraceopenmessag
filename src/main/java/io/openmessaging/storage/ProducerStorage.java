@@ -9,8 +9,8 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -24,6 +24,7 @@ public class ProducerStorage {
     static final int n_block_per_file = file_size / page_size;
     static final String file_prefix = StatusUtil.getFilePath() + File.separator + "mq.";
     private BlockingQueue<ProducerPage> pagesCache;
+    private BlockingQueue<ProducerPage> pagesPool;
     // 只有producer阶段使用
     int curr_file_num = -1;
     RandomAccessFile currFile;
@@ -52,7 +53,8 @@ public class ProducerStorage {
         try {
             currFile = new RandomAccessFile(file_prefix + ++curr_file_num, "rw");
             currFile.setLength((long) file_size);
-            pagesCache = new LinkedBlockingQueue<>(Conf.PAGE_CACHE_SIZE);
+            pagesCache = new ArrayBlockingQueue<ProducerPage>(Conf.PAGE_CACHE_SIZE);
+            pagesPool = new ArrayBlockingQueue<ProducerPage>(Conf.PAGE_CACHE_SIZE);
             new Thread(new IOThread(), "ProducerIOThread").start();
         }catch (IOException e){
             e.printStackTrace();
@@ -68,6 +70,10 @@ public class ProducerStorage {
         }
     }
 
+    public ProducerPage pollPageFromPool(){
+        return pagesPool.poll();
+    }
+
     class IOThread implements Runnable{
         @Override
         public void run() {
@@ -76,8 +82,10 @@ public class ProducerStorage {
                     ProducerPage page = pagesCache.poll(100, TimeUnit.MILLISECONDS);
                     if(page != null){
                         int block = storePageBytes(page.bytes);
-                        synchronized (this) {
-                            index[page.code].add(block);
+                        index[page.code].add(block);
+                        boolean offered = pagesPool.offer(page);
+                        if(!offered){
+                            logger.info("Offer page failed, pool size is {}", pagesPool.size());
                         }
                         continue;
                     }
@@ -88,8 +96,11 @@ public class ProducerStorage {
                 }
                 // 通知所有生茶这可以退出
                 storeIndex(index);
+                currFile.close();
                 DefaultProducer.ioFinish.countDown();
             }catch (InterruptedException e){
+                e.printStackTrace();
+            }catch (IOException e){
                 e.printStackTrace();
             }
         }
@@ -108,9 +119,6 @@ public class ProducerStorage {
     }
 
     public int storePageBytes(byte[] bytes){
-        if(bytes.length != page_size){
-            throw new RuntimeException("Only support " + page_size + "byte block");
-        }
         try {
             // 文件已经满了
             curr_block++;
@@ -121,8 +129,7 @@ public class ProducerStorage {
                 curr_block = 0;
             }
 
-            currFile.write(bytes);
-            currFile.getFD().sync();
+            currFile.write(bytes, 0, bytes.length);
         }catch (IOException e){
             e.printStackTrace();
         }

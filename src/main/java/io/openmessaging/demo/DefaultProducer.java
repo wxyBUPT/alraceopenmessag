@@ -67,8 +67,15 @@ public class DefaultProducer implements Producer{
 
         // 如果放不下当前消息, 如果缓存队列满了, 则会一直阻塞
         storage.putPage(page);
+        ProducerPage pooledPage = storage.pollPageFromPool();
 
-        caches[code] = new ProducerPage(code);
+        if(pooledPage==null) {
+            caches[code] = new ProducerPage(code);
+        }else {
+            pooledPage.setCode(code);
+            pooledPage.clear();
+            caches[code] = pooledPage;
+        }
         caches[code].storMessage(bytesMessage);
     }
 
