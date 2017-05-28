@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * Created by xiyuanbupt on 5/27/17.
@@ -54,9 +55,9 @@ public class ProducerStorage {
             currFile.setLength((long) file_size);
             pagesCache = new BlockingQueue[Conf.PRODUCER_COUNT];
             for(int i = 0; i<pagesCache.length; i++){
-                pagesCache[i] = new ArrayBlockingQueue<ProducerPage>(Conf.PAGE_CACHE_SIZE_PER_PRODUCER, true);
+                pagesCache[i] = new LinkedBlockingQueue<ProducerPage>(Conf.PAGE_CACHE_SIZE_PER_PRODUCER);
             }
-            pagesPool = new ArrayBlockingQueue<ProducerPage>(Conf.PAGE_CACHE_SIZE_PER_PRODUCER* Conf.PRODUCER_COUNT);
+            pagesPool = new LinkedBlockingQueue<>(Conf.PAGE_CACHE_SIZE_PER_PRODUCER* Conf.PRODUCER_COUNT);
             new Thread(new IOThread(), "ProducerIOThread").start();
         }catch (IOException e){
             e.printStackTrace();
@@ -82,6 +83,7 @@ public class ProducerStorage {
             try {
                 while (true) {
                     ProducerPage page = null;
+                    // 以下循环IOThread大多数和一个线程征用锁, 因为生产要快于IO,觉得不应该使用公平锁 应当尝试使用linkedblockingqueue
                     for(BlockingQueue<ProducerPage> cache:pagesCache){
                         page = cache.poll();
                         if(page != null)break;

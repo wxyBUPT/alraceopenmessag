@@ -50,8 +50,8 @@ public class DefaultProducer implements Producer{
     private Queue<ProducerBytesMessage> bytesMessagesPool ;
     {
         // 创建一定数量的对向
-        bytesMessagesPool = new ArrayDeque<>(16);
-        for(int i=0; i<8; i++){
+        bytesMessagesPool = new ArrayDeque<>(8);
+        for(int i=0; i<1; i++){
             bytesMessagesPool.add(new ProducerBytesMessage());
         }
     }
@@ -89,21 +89,19 @@ public class DefaultProducer implements Producer{
 
     @Override
     public void send(Message message) {
-        // TODO 需要改为producerbytesmessage
-        if (message == null) return;
         ProducerBytesMessage bytesMessage = (ProducerBytesMessage) message;
         String name = bytesMessage.getName();
         int code = NameUtil.getCode(name);
         ProducerPage page = caches[code];
         boolean saved = page.storMessage(bytesMessage);
         if(saved){
-            //TODO 归还 bytesmessage
+            //TODO 如果日志中size 为1, 那么不用归还, 一个线程用一个就行
             bytesMessagesPool.add(bytesMessage);
             return;
         }
 
 
-        // 如果放不下当前消息, 如果缓存队列满了, 则会一直阻塞
+        // TODO 两句都需要优化, 锁竞争应该比较激烈
         storage.putPage(m_id, page);
         ProducerPage pooledPage = storage.pollPageFromPool();
 
@@ -115,7 +113,7 @@ public class DefaultProducer implements Producer{
             caches[code] = pooledPage;
         }
         caches[code].storMessage(bytesMessage);
-        //TODO 归还消息, 不要给GC太大压力
+        // TODO 如果日志中size 为1, 那么不用归还, 一个线程就用一个
         bytesMessagesPool.add(bytesMessage);
     }
 
@@ -125,7 +123,7 @@ public class DefaultProducer implements Producer{
             storage.putPage(m_id, page);
         }
         threadCounter.decrementAndGet();
-        logger.info("Thread {} , BytesMessagePool size is {}", m_id, bytesMessagesPool.size());
+        logger.info("Thread {} , BytesMessagePool size is {}, if size is 1, mean can use no queue", m_id, bytesMessagesPool.size());
         try {
             ioFinish.await();
         }catch (InterruptedException e){
