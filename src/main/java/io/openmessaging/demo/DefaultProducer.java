@@ -13,8 +13,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class DefaultProducer implements Producer{
     public static AtomicInteger threadCounter = new AtomicInteger(0);
     public static CountDownLatch ioFinish = new CountDownLatch(1);
+    static transient int id = -1;
+
+    final private int m_id;
 
     public DefaultProducer(KeyValue properties){
+        m_id = ++id;
         threadCounter.incrementAndGet();
         try {
             StatusUtil.init(properties.getString("STORE_PATH"), true);
@@ -66,7 +70,7 @@ public class DefaultProducer implements Producer{
         if(saved)return;
 
         // 如果放不下当前消息, 如果缓存队列满了, 则会一直阻塞
-        storage.putPage(page);
+        storage.putPage(m_id, page);
         ProducerPage pooledPage = storage.pollPageFromPool();
 
         if(pooledPage==null) {
@@ -83,7 +87,7 @@ public class DefaultProducer implements Producer{
     public void flush() {
         //TODO 保存所有的消息
         for(ProducerPage page:caches){
-            storage.putPage(page);
+            storage.putPage(m_id, page);
         }
         threadCounter.decrementAndGet();
         try {

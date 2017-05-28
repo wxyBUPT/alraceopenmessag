@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -23,7 +24,7 @@ public class ProducerStorage {
     static final int file_size = Conf.FILE_SIZE;
     static final int n_block_per_file = file_size / page_size;
     static final String file_prefix = StatusUtil.getFilePath() + File.separator + "mq.";
-    private BlockingQueue<ProducerPage> pagesCache;
+    private BlockingQueue<ProducerPage>[] pagesCache;
     private BlockingQueue<ProducerPage> pagesPool;
     // 只有producer阶段使用
     int curr_file_num = -1;
@@ -53,8 +54,11 @@ public class ProducerStorage {
         try {
             currFile = new RandomAccessFile(file_prefix + ++curr_file_num, "rw");
             currFile.setLength((long) file_size);
-            pagesCache = new ArrayBlockingQueue<ProducerPage>(Conf.PAGE_CACHE_SIZE);
-            pagesPool = new ArrayBlockingQueue<ProducerPage>(Conf.PAGE_CACHE_SIZE);
+            pagesCache = new BlockingQueue[Conf.PRODUCER_COUNT];
+            for(int i = 0; i<pagesCache.length; i++){
+                pagesCache[i] = new LinkedBlockingQueue<>(Conf.PAGE_CACHE_SIZE_PER_PRODUCER);
+            }
+            pagesPool = new ArrayBlockingQueue<ProducerPage>(Conf.PAGE_CACHE_SIZE_PER_PRODUCER* Conf.PRODUCER_COUNT);
             new Thread(new IOThread(), "ProducerIOThread").start();
         }catch (IOException e){
             e.printStackTrace();
@@ -62,9 +66,9 @@ public class ProducerStorage {
     }
 
     // 将消息放入缓存队列, 如果队列满会一直阻塞
-    public void putPage(ProducerPage page){
+    public void putPage(int p_id, ProducerPage page){
         try {
-            pagesCache.put(page);
+            pagesCache[p_id].put(page);
         }catch (InterruptedException e){
             logger.info("Should not interrupt this function !");
         }
@@ -79,14 +83,15 @@ public class ProducerStorage {
         public void run() {
             try {
                 while (true) {
-                    ProducerPage page = pagesCache.poll(100, TimeUnit.MILLISECONDS);
+                    ProducerPage page = null;
+                    for(BlockingQueue<ProducerPage> cache:pagesCache){
+                        page = cache.poll();
+                        if(page != null)break;
+                    }
                     if(page != null){
                         int block = storePageBytes(page.bytes);
                         index[page.code].add(block);
                         boolean offered = pagesPool.offer(page);
-                        if(!offered){
-                            logger.info("Offer page failed, pool size is {}", pagesPool.size());
-                        }
                         continue;
                     }
                     // TODO 如果为null, 则需要判断生产者是否结束生产
@@ -98,9 +103,7 @@ public class ProducerStorage {
                 storeIndex(index);
                 currFile.close();
                 DefaultProducer.ioFinish.countDown();
-            }catch (InterruptedException e){
-                e.printStackTrace();
-            }catch (IOException e){
+            }catch (Exception e){
                 e.printStackTrace();
             }
         }
