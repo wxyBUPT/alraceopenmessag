@@ -17,6 +17,10 @@ public class NameUtil {
         }
     }
 
+    public static boolean isTopic(int code){
+        return code<topicCount;
+    }
+
     public static String getName(int i){
         return names[i];
     }

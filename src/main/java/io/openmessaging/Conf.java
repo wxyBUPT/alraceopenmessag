@@ -20,6 +20,12 @@ public class Conf {
     public final static int PRODUCER_COUNT = 10;
     public final static int TOTAL_COUNT = TOPIC_COUNT + QUEUE_COUNT;
 
-    //
+    // 共有多少pull consumer
     public final static int CONSUMER_THREAD_COUNT = 10;
+    // 每个pull consumer cache 消息的block块数
+    public final static int CONSUMER_CACHE_BLOCK_SIZE = 100;
+    // Consumer 解码线程的个数
+    public final static int CONSUMER_DECODE_THREAD_COUNT = 4;
+    // 每个解码线程缓存page数目
+    public final static int CONSUMER_DECODE_CACHE_BLOCK_COUNT = 100;
 }

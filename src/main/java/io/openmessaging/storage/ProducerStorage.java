@@ -11,8 +11,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Created by xiyuanbupt on 5/27/17.
@@ -56,7 +54,7 @@ public class ProducerStorage {
             currFile.setLength((long) file_size);
             pagesCache = new BlockingQueue[Conf.PRODUCER_COUNT];
             for(int i = 0; i<pagesCache.length; i++){
-                pagesCache[i] = new LinkedBlockingQueue<>(Conf.PAGE_CACHE_SIZE_PER_PRODUCER);
+                pagesCache[i] = new ArrayBlockingQueue<ProducerPage>(Conf.PAGE_CACHE_SIZE_PER_PRODUCER, true);
             }
             pagesPool = new ArrayBlockingQueue<ProducerPage>(Conf.PAGE_CACHE_SIZE_PER_PRODUCER* Conf.PRODUCER_COUNT);
             new Thread(new IOThread(), "ProducerIOThread").start();

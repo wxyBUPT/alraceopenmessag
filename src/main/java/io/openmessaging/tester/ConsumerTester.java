@@ -122,10 +122,11 @@ public class ConsumerTester {
         Thread[] ts = new Thread[Constants.CON_NUM];
         for (int i = 0; i < ts.length; i++) {
             List<String> topics = new ArrayList<>(2);
-            for(int j=0; j<9 ; j++){
+            for(int j=0; j<8 ; j++){
                 String name = Constants.TOPIC_PRE + (i*9 + j);
                 topics.add(name);
             }
+            topics.add(Constants.TOPIC_PRE + 8);
             ts[i] = new ConsumerTask(Constants.QUEUE_PRE + i,topics);
         }
         long start = System.currentTimeMillis();

@@ -3,23 +3,16 @@ package io.openmessaging.demo;
 /**
  * Created by xiyuanbupt on 5/27/17.
  */
-import io.openmessaging.KeyValue;
-import io.openmessaging.Message;
-import io.openmessaging.MessageHeader;
-import io.openmessaging.PullConsumer;
-import io.openmessaging.storage.MessageDecoder;
-import io.openmessaging.util.NameUtil;
+import io.openmessaging.*;
 import io.openmessaging.util.StatusUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 public class DefaultPullConsumer implements PullConsumer{
-
-    Logger logger = LoggerFactory.getLogger(DefaultPullConsumer.class);
-
 
     ConsumerCache consumerCache;
 
@@ -34,28 +27,14 @@ public class DefaultPullConsumer implements PullConsumer{
         consumerCache = ConsumerCache.getInstance();
     }
 
-    List<Message> firstMess = null;
+    BlockingQueue<List<DefaultBytesMessage>> messageBlocks = new ArrayBlockingQueue<List<DefaultBytesMessage>>(Conf.CONSUMER_CACHE_BLOCK_SIZE);
 
     @Override
     public void attachQueue(String queueName, Collection<String> topics) {
-        ioOrder = new PriorityQueue<>();
-        // 放入index
-        int queueCode = NameUtil.getCode(queueName);
-        List<Integer> queueBlocks = consumerCache.index[queueCode];
-        for(int num:queueBlocks){
-            ioOrder.add(new ConsumerCache.MessageBlock(queueName, queueCode, num, ConsumerCache.MessageType.QUEUE));
-        }
-        for(String topic:topics){
-            int topicCode = NameUtil.getCode(topic);
-            List<Integer> topicBlocks = consumerCache.index[topicCode];
-            for(int num:topicBlocks){
-                ioOrder.add(new ConsumerCache.MessageBlock(topic, topicCode, num, ConsumerCache.MessageType.TOPIC));
-            }
-        }
+        consumerCache.register(queueName, topics, this);
     }
-    Iterator<DefaultBytesMessage> iterator = new ArrayList<DefaultBytesMessage>().iterator();
 
-    private PriorityQueue<ConsumerCache.MessageBlock> ioOrder = null;
+    Iterator<DefaultBytesMessage> iterator = new ArrayList<DefaultBytesMessage>().iterator();
 
     @Override
     public KeyValue properties() {
@@ -76,16 +55,24 @@ public class DefaultPullConsumer implements PullConsumer{
     }
 
     private boolean updateIterator(){
-        if(ioOrder.isEmpty())return false;
-        ConsumerCache.MessageBlock block = ioOrder.poll();
-        if(block.isTopic()){
-            iterator = consumerCache.getTopicBlockFromLRUOrDisk(block.block_num, MessageHeader.TOPIC, block.name).iterator();
-        }else {
-            byte[] bytes = consumerCache.getBlockFromDisk(block.block_num);
-            List<DefaultBytesMessage> messages = MessageDecoder.decodePage2Messages(bytes, MessageHeader.QUEUE, block.name);
-            iterator = messages.iterator();
+
+        List<DefaultBytesMessage> messages = null;
+        try {
+            while (true) {
+                messages = messageBlocks.poll(200, TimeUnit.MILLISECONDS);
+                if (messages != null) {
+                    iterator = messages.iterator();
+                    return true;
+                }
+                if (consumerCache.isDecodeFinish()) {
+                    return false;
+                }
+            }
+        }catch (InterruptedException e){
+            e.printStackTrace();
+            // 如果被中断, 那么执行结束
+            return false;
         }
-        return true;
     }
 
     @Override
