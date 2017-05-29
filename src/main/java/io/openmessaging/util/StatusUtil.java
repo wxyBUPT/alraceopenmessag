@@ -13,7 +13,7 @@ public class StatusUtil {
     private static String filePath;
     private static transient boolean inited = false;
 
-    public synchronized static void init(String filPath, boolean isProducer) throws IOException {
+    public static void init(String filPath, boolean isProducer) {
         if(inited)return;
         inited = true;
         filePath = filPath;

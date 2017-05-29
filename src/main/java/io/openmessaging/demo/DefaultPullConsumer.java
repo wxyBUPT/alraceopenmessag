@@ -6,7 +6,6 @@ package io.openmessaging.demo;
 import io.openmessaging.*;
 import io.openmessaging.util.StatusUtil;
 
-import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -17,12 +16,7 @@ public class DefaultPullConsumer implements PullConsumer{
     ConsumerCache consumerCache;
 
     public DefaultPullConsumer(KeyValue properties){
-        try{
-            StatusUtil.init(properties.getString("STORE_PATH"), false);
-        }catch (IOException e){
-            e.printStackTrace();
-            System.exit(-1);
-        }
+        StatusUtil.init(properties.getString("STORE_PATH"), false);
         consumerCache = ConsumerCache.getInstance();
     }
 
