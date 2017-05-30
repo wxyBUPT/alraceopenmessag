@@ -9,14 +9,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Created by xiyuanbupt on 5/27/17.
- * 处理IO顺序, 处理解码
+ * 负责处理多个consumer共同订阅的topic的io 与编码解码工作
  */
 public class ConsumerCache {
 
@@ -27,152 +23,125 @@ public class ConsumerCache {
 
     final List<Integer>[] index = consumerStorage.getIndex();
 
-    final boolean[] registerd = new boolean[Conf.TOTAL_COUNT];
+    Set<DefaultPullConsumer> consumers = new HashSet<>(16);
 
-    transient boolean ioFinish = false;
     transient boolean decodeFinish = false;
-    transient int decoderThreadCount = 0;
+    transient int n_cache_thread_running = 0;
+
+    // cache使用的解码线程的数量
+    final int share_decode_count = Conf.SHARE_DECODE_COUNT ;
+    final int count_per_thread = Conf.TOPIC_COUNT / share_decode_count ;
+    {
+        assert Conf.TOPIC_COUNT % share_decode_count == 0;
+    }
+
 
     public boolean isDecodeFinish(){
         return decodeFinish;
     }
 
-    List<DefaultPullConsumer>[] router = new List[Conf.TOTAL_COUNT];
+    List<DefaultPullConsumer>[] router = new List[Conf.TOPIC_COUNT];
     {
         for(int i = 0; i<router.length; i++){
             router[i] = new ArrayList<>(4);
         }
     }
-    final private PriorityQueue<MessageBlock> ioOrder = new PriorityQueue<>();
+    final private PriorityQueue<MessageBlock>[] ioOrders = new PriorityQueue[share_decode_count];
+    {
+        for(int i = 0; i<share_decode_count; i++){
+            ioOrders[i] = new PriorityQueue<>(128);
+        }
+    }
 
-    public void register(String queueName, Collection<String> topics, DefaultPullConsumer consumer){
+    public void register(Collection<String> topics, DefaultPullConsumer consumer){
         registeredCount ++;
-        registerQueue(queueName, consumer);
         registerTopic(topics, consumer);
+        consumers.add(consumer);
 
         if(registeredCount == Conf.CONSUMER_THREAD_COUNT){
-            // TODO init ioOrder
             initIoOrder();
-            // TODO init shardedBlock
-            for(int i=0;i<shardedBlock.length; i++){
-                shardedBlock[i] = new ArrayBlockingQueue<MessageBlock>(Conf.CONSUMER_DECODE_CACHE_BLOCK_COUNT);
+            // TODO start topic decode and io thread
+            Thread[] threads = new Thread[share_decode_count];
+            for(int i=0;i<share_decode_count; i++){
+                threads[i] = new Thread(new CachedTopicIOThread(i), "CachedTopicIOThread" + i);
             }
-            // TODO start io loop
-            new Thread(new IOThread(), "ConsumerIOThread").start();
-            // TODO start decoder thread
-            decoderThreadCount += shardedBlock.length;
-            for(int i=0; i<shardedBlock.length; i++){
-                new Thread(new DecoderThread(i), "DecoderThread_" + i).start();
+            for(Thread thread:threads){
+                thread.start();
             }
         }
-    }
-
-    // 不想给gc造成太大压力, 复用bytes对象
-    Queue<byte[]> bytesPool = new LinkedBlockingQueue<byte[]>(Conf.CONSUMER_DECODE_THREAD_COUNT * Conf.CONSUMER_DECODE_CACHE_BLOCK_COUNT);
-    int page_size = Conf.PAGE_SIZE;
-
-    BlockingQueue<MessageBlock>[] shardedBlock = new BlockingQueue[Conf.CONSUMER_DECODE_THREAD_COUNT];
-
-    class IOThread implements Runnable{
-        int hashbits = Conf.CONSUMER_DECODE_THREAD_COUNT - 1;
-        @Override
-        public void run() {
-            try {
-                // 只要有io块
-                while (!ioOrder.isEmpty()) {
-                    // 首先读出
-                    MessageBlock block = ioOrder.poll();
-                    byte[] bytes = bytesPool.poll();
-                    if(bytes == null){
-                        bytes = new byte[page_size];
-                    }
-                    consumerStorage.getPageBytes(block.block_num, bytes);
-                    block.setBytes(bytes);
-
-                    int shard = block.code & hashbits;
-
-                    // 无论如何都要将数据放进去
-                    shardedBlock[shard].put(block);
-                }
-            }catch (InterruptedException e){
-                e.printStackTrace();
-            }
-            logger.info("IOFinish ");
-            ioFinish = true;
-        }
-    }
-
-    class DecoderThread implements Runnable{
-
-        BlockingQueue<MessageBlock> blocks;
-
-        public DecoderThread(int i){
-            blocks = shardedBlock[i];
-        }
-
-        @Override
-        public void run() {
-            try {
-                while (true) {
-                    // TODO一直从自己的队列里面取数据
-                    MessageBlock block = blocks.poll(200, TimeUnit.MILLISECONDS);
-                    if (block != null) {
-                        // TODO 解码, 并route 对应的消费者中
-                        String key;
-                        if (block.isTopic()) {
-                            key = MessageHeader.TOPIC;
-                        } else {
-                            key = MessageHeader.QUEUE;
-                        }
-                        // TODO 将消息route到订阅的消费者
-                        List<DefaultBytesMessage> messages = MessageDecoder.decodePage2Messages(block.getBytes(), key, block.name);
-                        // TODO 将block的数据还回对象池
-                        if(!bytesPool.offer(block.bytes)){
-                            logger.info("May have wrone , can't put bytes to bytes pool , pool size is {}, if this log show, decoder may slower than IO", bytesPool.size());
-                        }
-
-                        for (DefaultPullConsumer consumer : router[block.code]) {
-                            consumer.messageBlocks.put(messages);
-                        }
-                    } else {
-                        if (ioFinish) {
-                            decoderThreadCount--;
-                            if (decoderThreadCount == 0) {
-                                logger.info("All Decoder finish ");
-                                decodeFinish = true;
-                            }
-                            break;
-                        }
-                    }
-                }
-            }catch (InterruptedException e){
-                e.printStackTrace();
-            }
-        }
-    }
-
-    private void initIoOrder(){
-        int count = registerd.length;
-        for(int i=0; i<count; i++){
-            if(!registerd[i])continue;
-            List<Integer> blocks = index[i];
-            for(int num:blocks){
-                ioOrder.add(new MessageBlock(i, num));
-            }
-        }
-    }
-
-    private void registerQueue(String queueName, DefaultPullConsumer consumer){
-        int code = NameUtil.getCode(queueName);
-        registerd[code] = true;
-        router[code].add(consumer);
     }
 
     private void registerTopic(Collection<String> topics, DefaultPullConsumer consumer){
         for(String topic:topics){
             int code = NameUtil.getCode(topic);
-            registerd[code] = true;
             router[code].add(consumer);
+        }
+    }
+
+    private void initIoOrder(){
+        int len = router.length;
+        assert len % share_decode_count == 0;
+
+
+        for(int i = 0; i<len ;i++){
+            List<DefaultPullConsumer> consumers = router[i];
+            if(consumers.size() == 0)continue;// 没有订阅
+
+            if(consumers.size()>1){// 订阅数量大于1
+                List<Integer> blocks = index[i];
+                for(int num:blocks){
+                    ioOrders[i/count_per_thread].add(new MessageBlock(i, num));
+                }
+            }else {// 只有一个订阅
+                router[i].get(0).realAttachTopic(i);
+                router[i].clear();
+            }
+        }
+        for(DefaultPullConsumer consumer:consumers){
+            consumer.initIOOrder();
+        }
+    }
+
+    int page_size = Conf.PAGE_SIZE;
+
+    class CachedTopicIOThread implements Runnable{
+        PriorityQueue<MessageBlock> ioOrder;
+        CachedTopicIOThread(int i){
+            ioOrder = ioOrders[i];
+            n_cache_thread_running++;
+        }
+        byte[] bytes = new byte[page_size];
+        @Override
+        public void run() {
+            try {
+                while (!ioOrder.isEmpty()) {
+                    MessageBlock block = ioOrder.poll();
+                    // 从磁盘中读出数据
+                    consumerStorage.getPageBytes(block.block_num, bytes);
+                    // 解码
+                    String key = null;
+                    if (block.isTopic()) {
+                        key = MessageHeader.TOPIC;
+                    } else {
+                        key = MessageHeader.QUEUE;
+                    }
+                    List<DefaultBytesMessage> messages = MessageDecoder.decodePage2Messages(bytes, key, block.name);
+
+                    // TODO 向所有的consumer放入数据块
+                    for (DefaultPullConsumer consumer : router[block.code]) {
+                        consumer.messageBlocks.put(messages);
+                    }
+                }
+
+            }catch (InterruptedException e){
+                e.printStackTrace();
+            }
+
+            n_cache_thread_running--;
+            if(n_cache_thread_running==0){
+                logger.info("All cached decode and io finish ");
+                decodeFinish = true;
+            }
         }
     }
 

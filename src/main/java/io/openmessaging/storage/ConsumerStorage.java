@@ -74,7 +74,6 @@ public class ConsumerStorage {
         }
     }
 
-
     public List<Integer>[] getIndex(){
         List<Integer>[] res = null;
         try {

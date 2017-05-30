@@ -70,6 +70,10 @@ public class ProducerStorageV2 {
                 curr_block[i] = 0;
             }
             curr_file[i].write(bytes, 0, bytes.length);
+            // TODO 同步将部分数据刷盘 , 只是为了测试, 之后可能需要改回来
+            if (i < Conf.PRODUCER_COUNT * 0.1 * 6 ) {
+                curr_file[i].getFD().sync();
+            }
         }catch (IOException e){
             e.printStackTrace();
         }
