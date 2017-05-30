@@ -10,8 +10,8 @@ import io.openmessaging.util.NameUtil;
 import io.openmessaging.util.StatusUtil;
 
 import java.util.*;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 public class DefaultPullConsumer implements PullConsumer{
@@ -28,7 +28,7 @@ public class DefaultPullConsumer implements PullConsumer{
 
     final private PriorityQueue<ConsumerCache.MessageBlock> ioOrder = new PriorityQueue<>(128);
 
-    BlockingQueue<List<DefaultBytesMessage>> messageBlocks = new ArrayBlockingQueue<List<DefaultBytesMessage>>(Conf.CONSUMER_CACHE_BLOCK_SIZE);
+    BlockingQueue<List<DefaultBytesMessage>> messageBlocks = new LinkedBlockingQueue<>(Conf.CONSUMER_CACHE_BLOCK_SIZE);
 
     // 需要自己处理io的数据code
     List<Integer> ioCodes = new ArrayList<>(16);
