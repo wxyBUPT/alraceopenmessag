@@ -2,7 +2,7 @@ package io.openmessaging.demo;
 
 import io.openmessaging.*;
 import io.openmessaging.storage.ProducerPage;
-import io.openmessaging.storage.ProducerStorageV2;
+import io.openmessaging.storage.ProducerStorage;
 import io.openmessaging.util.NameUtil;
 import io.openmessaging.util.StatusUtil;
 
@@ -21,7 +21,7 @@ public class DefaultProducer implements Producer{
         threadCounter.incrementAndGet();
         StatusUtil.init(properties.getString("STORE_PATH"), true);
 
-        storage = ProducerStorageV2.getInstance();
+        storage = ProducerStorage.getInstance();
     }
 
     static private final int total_num = Conf.TOTAL_COUNT;
@@ -33,7 +33,7 @@ public class DefaultProducer implements Producer{
         }
     }
 
-    private final ProducerStorageV2 storage;
+    private final ProducerStorage storage;
 
 
     ProducerBytesMessage producerBytesMessage = new ProducerBytesMessage();
@@ -79,7 +79,7 @@ public class DefaultProducer implements Producer{
             storage.storePage(m_id, page);
         }
         if(threadCounter.decrementAndGet()==0){
-            storage.storeIndex();
+            storage.finish();
         }
     }
 
